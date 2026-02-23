@@ -12,6 +12,7 @@ Python backend built with **Clean Architecture (Hexagonal)** for AI/LLM integrat
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
+- [Azure AI Search (Production Vector Store)](#azure-ai-search-production-vector-store)
 - [Database](#database)
 - [Running the Server](#running-the-server)
 - [Endpoints](#endpoints)
@@ -284,10 +285,10 @@ sequenceDiagram
 | AI / LLM | LangChain 0.3.9, LangGraph 0.2 |
 | Azure AI | azure-ai-inference 1.0.0b7 + azure-identity |
 | OpenAI | openai 1.57, langchain-openai |
-| Database | PostgreSQL 17 + pgvector |
+| Database | PostgreSQL 17 + pgvector (dev) / Azure AI Search (prod) |
 | ORM / Async | SQLAlchemy 2.0 asyncio + asyncpg |
 | Migrations | Alembic 1.14 |
-| Vector Store | pgvector + langchain-postgres |
+| Vector Store | pgvector (dev) + Azure AI Search 11.6 (prod) |
 | Streaming | sse-starlette (SSE) |
 | Config | Pydantic Settings v2 |
 | Python | 3.9+ |
@@ -361,6 +362,45 @@ DATABASE_URL=postgresql+asyncpg://postgres@localhost:5432/proyectia
 # API Key for authentication (minimum 32 characters)
 SECRET_KEY=your_very_long_secret_key_minimum_32_chars
 ```
+
+---
+
+## Azure AI Search (Production Vector Store)
+
+The backend automatically switches from **pgvector** (local dev) to **Azure AI Search** (staging/production) based on the `APP_ENV` variable:
+
+| `APP_ENV` | Vector Store |
+|-----------|-------------|
+| `development` | PostgreSQL + pgvector |
+| `staging` / `production` | Azure AI Search (`mi-search-demo`) |
+
+### Setup
+
+1. Go to **Azure Portal → `mi-search-demo` → Keys** and copy the **Admin Key**.
+2. Set the following vars in your production `.env`:
+
+```dotenv
+APP_ENV=production
+
+AZURE_SEARCH_ENDPOINT=https://mi-search-demo.search.windows.net
+AZURE_SEARCH_API_KEY=your_admin_key_here
+AZURE_SEARCH_INDEX_NAME=docs_ia_project       # created automatically on first use
+AZURE_SEARCH_SEMANTIC_CONFIG=default
+```
+
+> The index (`proyectia-docs`) is **created automatically** by `AzureSearchRepository` on first request. It uses an **HNSW** vector profile with the configured embedding dimension (default: 3072 for `text-embedding-3-large`).
+
+### Index schema
+
+| Field | Type | Role |
+|-------|------|------|
+| `id` | `Edm.String` (key) | Unique chunk ID |
+| `content` | `Edm.String` (searchable) | Chunk text |
+| `content_vector` | `Collection(Edm.Single)` | HNSW vector |
+| `document_id` | `Edm.String` (filterable) | Parent document |
+| `chunk_index` | `Edm.Int32` | Position in document |
+| `source` | `Edm.String` (filterable) | File/URL origin |
+| `metadata_json` | `Edm.String` | Extra metadata (JSON) |
 
 ---
 
@@ -501,7 +541,8 @@ proyectIA/
 │   │   │   │   └── conversation_model.py
 │   │   │   └── repositories/
 │   │   │       ├── conversation_repository.py
-│   │   │       └── pgvector_repository.py
+│   │   │       ├── pgvector_repository.py       # Vector store: local dev
+│   │   │       └── azure_search_repository.py   # Vector store: staging/production
 │   │   └── container.py                 # Dependency injection (FastAPI Depends)
 │   └── api/
 │       ├── v1/

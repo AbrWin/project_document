@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from uuid import UUID
 
-from src.domain.entities.document import Document, DocumentChunk
+from src.domain.entities.document import DocumentChunk
 from src.domain.entities.message import Conversation, Message
 
 
@@ -39,11 +39,6 @@ class ConversationRepositoryPort(ABC):
 
 class VectorStorePort(ABC):
     """Port for vector store (RAG) operations."""
-
-    @abstractmethod
-    async def add_documents(self, documents: list[Document]) -> list[str]:
-        """Embed and store document chunks. Returns chunk IDs."""
-        ...
 
     @abstractmethod
     async def similarity_search(

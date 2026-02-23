@@ -64,21 +64,6 @@ class ConversationDetailResponse(BaseModel):
 # RAG Schemas
 # ============================================================
 
-class IngestDocumentRequest(BaseModel):
-    source: str = Field(..., examples=["https://docs.example.com/page"])
-    content: str = Field(..., min_length=10)
-    title: Optional[str] = None
-    chunk_size: int = Field(1000, ge=100, le=8000)
-    chunk_overlap: int = Field(200, ge=0, le=1000)
-    metadata: dict = Field(default_factory=dict)
-
-
-class IngestDocumentResponse(BaseModel):
-    document_id: UUID
-    source: str
-    chunk_count: int
-
-
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     top_k: int = Field(5, ge=1, le=20)
@@ -98,6 +83,60 @@ class SearchResponse(BaseModel):
     query: str
     results: list[ChunkResponse]
     total: int
+
+
+# ============================================================
+# Excel Schemas
+# ============================================================
+
+class ExcelSheetResponse(BaseModel):
+    sheet_name: str
+    columns: list[str]
+    rows: list[dict]          # Array of objects — one per row
+    row_count: int
+
+
+class ExcelParseResponse(BaseModel):
+    filename: str
+    sheets: list[ExcelSheetResponse]
+    total_rows: int
+
+
+# ============================================================
+# Integrated Vectorization (Mode 2) Schemas
+# ============================================================
+
+class ProvisionComponent(BaseModel):
+    index: str
+    datasource: str
+    skillset: str
+    indexer: str
+
+
+class ProvisionResponse(BaseModel):
+    message: str
+    index_name: str
+    components: ProvisionComponent
+
+
+class IndexerStatusResponse(BaseModel):
+    indexer: str
+    status: str
+    last_run_status: Optional[str] = None
+    last_run_start: Optional[str] = None
+    last_run_end: Optional[str] = None
+    items_processed: int = 0
+    items_failed: int = 0
+    errors: list[str] = []
+
+
+class BlobIngestResponse(BaseModel):
+    filename: str
+    blob_name: str
+    blob_url: str
+    sheets: list[ExcelSheetResponse]
+    total_rows: int
+    indexer_triggered: bool
 
 
 # ============================================================

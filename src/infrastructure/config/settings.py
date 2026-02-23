@@ -25,8 +25,7 @@ class AIProvider(str, Enum):
 
 
 class VectorStoreProvider(str, Enum):
-    PGVECTOR = "pgvector"
-    FAISS = "faiss"
+    AZURE_SEARCH = "azure_search"
 
 
 class Settings(BaseSettings):
@@ -84,9 +83,22 @@ class Settings(BaseSettings):
     DATABASE_MAX_OVERFLOW: int = 20
 
     # ------------------------------------------------------------------ Vector Store
-    VECTOR_STORE_PROVIDER: VectorStoreProvider = VectorStoreProvider.PGVECTOR
+    VECTOR_STORE_PROVIDER: VectorStoreProvider = VectorStoreProvider.AZURE_SEARCH
     VECTOR_COLLECTION_NAME: str = "documents"
     EMBEDDING_DIMENSION: int = 3072
+
+    # ------------------------------------------------------------------ Azure AI Search
+    AZURE_SEARCH_ENDPOINT: Optional[str] = None          # https://mi-search-demo.search.windows.net
+    AZURE_SEARCH_API_KEY: Optional[str] = None           # Admin key from Azure Portal
+    AZURE_SEARCH_INDEX_NAME: str = "docs_ia"         # Index name
+    AZURE_SEARCH_DATASOURCE_NAME: str = "docsiaproject-datasource"  # created by /provision, no folderPath restriction
+    AZURE_SEARCH_INDEXER_NAME: str = "docsiaproject-indexer"
+    AZURE_SEARCH_SKILLSET_NAME: str = "docsiaproject-skillset"
+    AZURE_SEARCH_SEMANTIC_CONFIG: str = "default"        # Semantic config name (optional)
+
+    # ------------------------------------------------------------------ Azure Blob Storage (Mode 2)
+    AZURE_STORAGE_CONNECTION_STRING: Optional[str] = None   # From Azure Portal → Storage Account → Access keys
+    AZURE_STORAGE_CONTAINER_NAME: str = "rag-documents"     # Container for JSON blobs (created automatically)
 
     # ------------------------------------------------------------------ Validators
     @field_validator("AZURE_OPENAI_ENDPOINT", mode="before")
@@ -97,6 +109,17 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == AppEnv.PRODUCTION
+
+    @property
+    def use_integrated_vectorization(self) -> bool:
+        """True when Blob Storage + Azure Search are both configured for Mode 2."""
+        return (
+            bool(self.AZURE_SEARCH_ENDPOINT)
+            and bool(self.AZURE_SEARCH_API_KEY)
+            and bool(self.AZURE_STORAGE_CONNECTION_STRING)
+            and bool(self.AZURE_OPENAI_ENDPOINT)
+            and bool(self.AZURE_OPENAI_API_KEY)
+        )
 
     @property
     def database_url_sync(self) -> str:
