@@ -33,18 +33,33 @@ class AzureOpenAIProvider(AIProviderPort):
         self._settings = settings
         self._llm_cache: dict[str, AzureChatOpenAI] = {}
 
+    # Reasoning models (o-series, gpt-5-*) do not support custom temperature/max_tokens params.
+    _REASONING_MODEL_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+
+    def _is_reasoning_model(self) -> bool:
+        name = self._settings.AZURE_OPENAI_DEPLOYMENT_NAME.lower()
+        return any(name.startswith(p) for p in self._REASONING_MODEL_PREFIXES)
+
     def _get_llm(self, config: LLMConfig, streaming: bool = False) -> AzureChatOpenAI:
         cache_key = f"{config.temperature}_{config.max_tokens}_{streaming}"
         if cache_key not in self._llm_cache:
-            self._llm_cache[cache_key] = AzureChatOpenAI(
+            kwargs: dict = dict(
                 azure_deployment=self._settings.AZURE_OPENAI_DEPLOYMENT_NAME,
                 azure_endpoint=self._settings.AZURE_OPENAI_ENDPOINT,
                 api_key=self._settings.AZURE_OPENAI_API_KEY,
                 api_version=self._settings.AZURE_OPENAI_API_VERSION,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
                 streaming=streaming,
             )
+            if self._is_reasoning_model():
+                kwargs["temperature"] = 1
+                # Reasoning models spend tokens on internal thinking before producing output.
+                # Enforce a minimum budget so the model has tokens left for the visible response.
+                reasoning_budget = max(config.max_tokens, 16000)
+                kwargs["max_completion_tokens"] = reasoning_budget
+            else:
+                kwargs["temperature"] = config.temperature
+                kwargs["max_tokens"] = config.max_tokens
+            self._llm_cache[cache_key] = AzureChatOpenAI(**kwargs)
         return self._llm_cache[cache_key]
 
     @property
@@ -67,7 +82,20 @@ class AzureOpenAIProvider(AIProviderPort):
 
         try:
             response = await llm.ainvoke(lc_messages)
-            return Message(role=MessageRole.ASSISTANT, content=response.content)
+            logger.debug(
+                "azure_openai.chat.raw_response",
+                content=response.content,
+                content_type=type(response.content).__name__,
+                response_metadata=response.response_metadata,
+                additional_kwargs=response.additional_kwargs,
+            )
+            content = response.content
+            if isinstance(content, list):
+                content = "".join(
+                    block.get("text", "") if isinstance(block, dict) else str(block)
+                    for block in content
+                )
+            return Message(role=MessageRole.ASSISTANT, content=content)
         except Exception as exc:
             logger.error("azure_openai.chat.error", error=str(exc))
             raise AIProviderError(str(exc), provider="azure_openai") from exc
@@ -83,8 +111,14 @@ class AzureOpenAIProvider(AIProviderPort):
 
         try:
             async for chunk in llm.astream(lc_messages):
-                if chunk.content:
-                    yield chunk.content
+                content = chunk.content
+                if isinstance(content, list):
+                    content = "".join(
+                        block.get("text", "") if isinstance(block, dict) else str(block)
+                        for block in content
+                    )
+                if content:
+                    yield content
         except Exception as exc:
             logger.error("azure_openai.stream.error", error=str(exc))
             raise AIProviderError(str(exc), provider="azure_openai") from exc

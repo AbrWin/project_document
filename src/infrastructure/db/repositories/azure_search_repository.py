@@ -120,8 +120,10 @@ class AzureSearchRepository(VectorStorePort):
 
     def _to_chunks(self, results, score_threshold: float) -> List[DocumentChunk]:
         chunks: List[DocumentChunk] = []
+        all_scores = []
         for result in results:
             score: float = result.get("@search.score", 0.0)
+            all_scores.append(score)
             if score < score_threshold:
                 continue
 
@@ -145,5 +147,12 @@ class AzureSearchRepository(VectorStorePort):
             )
             chunks.append(chunk)
 
-        logger.info("azure_search.search", results=len(chunks), index=self._index_name)
+        logger.info(
+            "azure_search.search",
+            results_after_filter=len(chunks),
+            total_raw_results=len(all_scores),
+            scores=all_scores,
+            score_threshold=score_threshold,
+            index=self._index_name,
+        )
         return chunks

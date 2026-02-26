@@ -150,6 +150,12 @@ class ChatUseCase:
                 score_threshold=cfg.similarity_threshold,
                 collection=cfg.collection_name,
             )
+            logger.info(
+                "chat.rag_context",
+                chunks_found=len(chunks),
+                top_k=cfg.top_k,
+                score_threshold=cfg.similarity_threshold,
+            )
             if chunks:
                 context = "\n\n---\n\n".join(c.content for c in chunks)
                 rag_system = Message(

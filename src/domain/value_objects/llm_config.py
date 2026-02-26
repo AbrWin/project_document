@@ -23,7 +23,7 @@ class RAGConfig:
     """Configuration for RAG retrieval."""
     top_k: int = 5
     similarity_threshold: float = 0.7
-    collection_name: str = "documents"
+    collection_name: Optional[str] = None  # None = no filter, searches all documents
     rerank: bool = False
 
 

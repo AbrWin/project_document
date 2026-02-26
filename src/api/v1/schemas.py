@@ -40,7 +40,7 @@ class SendMessageRequest(BaseModel):
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(None, ge=1, le=128_000)
     use_rag: bool = Field(False, description="Inject relevant documents from vector store")
-    rag_top_k: int = Field(5, ge=1, le=20)
+    rag_top_k: int = Field(5, ge=1, le=1000)
     rag_score_threshold: float = Field(0.7, ge=0.0, le=1.0)
 
 
@@ -60,13 +60,29 @@ class ConversationDetailResponse(BaseModel):
     messages: list[MessageResponse] = []
 
 
+class QuickChatRequest(BaseModel):
+    """Creates a conversation and sends the first message in a single call."""
+    content: str = Field(..., min_length=1, max_length=32_000, examples=["¿Qué contiene el documento?"])
+    title: Optional[str] = Field(None, max_length=255, description="Conversation title. Auto-generated if omitted.")
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(None, ge=1, le=128_000)
+    use_rag: bool = Field(False, description="Inject relevant documents from vector store")
+    rag_top_k: int = Field(5, ge=1, le=1000)
+    rag_score_threshold: float = Field(0.0, ge=0.0, le=1.0)
+
+
+class QuickChatResponse(BaseModel):
+    conversation_id: UUID
+    message: MessageResponse
+
+
 # ============================================================
 # RAG Schemas
 # ============================================================
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
-    top_k: int = Field(5, ge=1, le=20)
+    top_k: int = Field(5, ge=1, le=1000)
     score_threshold: float = Field(0.7, ge=0.0, le=1.0)
     collection: Optional[str] = None
 

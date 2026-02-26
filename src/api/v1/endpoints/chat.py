@@ -18,6 +18,8 @@ from src.api.v1.schemas import (
     ConversationResponse,
     CreateConversationRequest,
     MessageResponse,
+    QuickChatRequest,
+    QuickChatResponse,
     SendMessageRequest,
 )
 from src.domain.exceptions.ai_exceptions import (
@@ -85,6 +87,55 @@ async def get_conversation(
             )
             for m in conv.messages
         ],
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Quick chat — creates conversation + sends message in one call
+# ──────────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/messages",
+    response_model=QuickChatResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create conversation and send first message in one call",
+)
+async def quick_chat(
+    body: QuickChatRequest,
+    use_case: ChatUseCaseDep,
+):
+    conversation = await use_case.start_conversation(title=body.title)
+    llm_config = _build_llm_config(body)
+    rag_config = RAGConfig(top_k=body.rag_top_k, similarity_threshold=body.rag_score_threshold)
+
+    try:
+        message = await use_case.send_message(
+            conversation_id=conversation.id,
+            user_content=body.content,
+            llm_config=llm_config,
+            rag_config=rag_config,
+            use_rag=body.use_rag,
+        )
+    except ConversationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message)
+    except RateLimitError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=exc.message,
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+    except AIProviderError as exc:
+        raise HTTPException(status_code=502, detail=exc.message)
+
+    return QuickChatResponse(
+        conversation_id=conversation.id,
+        message=MessageResponse(
+            id=message.id,
+            role=message.role.value,
+            content=message.content,
+            conversation_id=message.conversation_id,
+            created_at=message.created_at,
+        ),
     )
 
 
